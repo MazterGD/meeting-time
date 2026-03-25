@@ -48,3 +48,10 @@ The application will be available at `http://localhost:5173/` (or the next avail
     - **Find Overlap**: View the daily heatmap to see "Ideal" (everyone in working hours) and "Acceptable" (reasonable hours for all) suggestions.
 3.  **Adjust Date**: Use the date picker to check for specific days (accounts for DST changes).
 4.  **Global Reference**: Refer to the "GMT 0" display next to the date for the universal meeting time.
+
+## Data Persistence & Sharing
+
+`tzmeet` uses two methods to preserve and share your team setup:
+
+- **Automatic Saving**: Your team members are automatically saved to your browser's `localStorage`. They will be restored whenever you reopen the app in the same browser.
+- **Save & Share**: Clicking the **"Share link"** button (top right) generates a unique URL containing all your current settings. You can save this link for future use or share it with others; the application will automatically restore the team configuration when the hashed URL is opened.
