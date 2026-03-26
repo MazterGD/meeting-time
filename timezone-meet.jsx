@@ -23,6 +23,23 @@ function fmtOffset(tz) {
   } catch { return "UTC+0"; }
 }
 
+function sanitizeName(s) {
+  return s.replace(/<[^>]*>?/gm, "").slice(0, 50);
+}
+
+function validateHashData(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (!Array.isArray(s.members)) s.members = [];
+  s.members = s.members.filter(m => m && typeof m.name === 'string').map(m => ({
+    id: typeof m.id === 'string' ? m.id : uid(),
+    name: sanitizeName(m.name),
+    timezone: ALL_TZS.find(t => t.name === m.timezone) ? m.timezone : BROWSER_TZ
+  }));
+  if (s.date && !/^\d{4}-\d{2}-\d{2}$/.test(s.date)) delete s.date;
+  if (typeof s.hour !== 'number' || s.hour < 0 || s.hour > 23) delete s.hour;
+  return s;
+}
+
 let ALL_TZS;
 try {
   const raw = Intl.supportedValuesOf("timeZone");
@@ -51,9 +68,18 @@ function localTimeAt(dateObj, tz) {
   } catch { return { hour: 0, min: "00", weekday: "", display: "00:00" }; }
 }
 
-function hourStatus(h) {
-  if (h >= 17 || h < 1) return "good";
-  if ((h >= 15 && h < 17) || (h >= 1 && h < 3)) return "okay";
+function hourStatus(h, start, end) {
+  // Good: start to end (inclusive start, exclusive end)
+  // Example: 17 to 1 (5pm to 1am)
+  const isGood = end > start ? (h >= start && h < end) : (h >= start || h < end);
+  if (isGood) return "good";
+  
+  // Okay: 2 hours before/after good
+  const sOkay = (start - 2 + 24) % 24;
+  const eOkay = (end + 2) % 24;
+  const isOkay = eOkay > sOkay ? (h >= sOkay && h < eOkay) : (h >= sOkay || h < eOkay);
+  if (isOkay) return "okay";
+  
   return "bad";
 }
 
@@ -73,14 +99,19 @@ const S = {
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [members, setMembers] = useState(() => {
-    try { const s = localStorage.getItem("tz-team-v2"); return s ? JSON.parse(s) : [{ id: uid(), name: "You", timezone: BROWSER_TZ }]; }
-    catch { return [{ id: uid(), name: "You", timezone: BROWSER_TZ }]; }
+  const [storage, setStorage] = useState(() => {
+    try {
+      const s = localStorage.getItem("tz-team-v2");
+      return s ? JSON.parse(s) : null;
+    } catch { return null; }
   });
 
+  const [members, setMembers] = useState(() => storage?.members || [{ id: uid(), name: "You", timezone: BROWSER_TZ }]);
   const [tab, setTab]               = useState("check");
   const [date, setDate]             = useState(() => new Date().toISOString().slice(0, 10));
   const [hour, setHour]             = useState(14);
+  const [workingStart, setWorkingStart] = useState(() => storage?.workingStart ?? 17);
+  const [workingEnd, setWorkingEnd]     = useState(() => storage?.workingEnd ?? 1);
 
   const [showAdd,  setShowAdd]      = useState(false);
   const [addName,  setAddName]      = useState("");
@@ -89,12 +120,25 @@ export default function App() {
   const [showDrop, setShowDrop]     = useState(false);
   const [copied,   setCopied]       = useState(false);
 
-  useEffect(() => { try { localStorage.setItem("tz-team-v2", JSON.stringify(members)); } catch {} }, [members]);
+  useEffect(() => { 
+    try { 
+      localStorage.setItem("tz-team-v2", JSON.stringify({ members, workingStart, workingEnd })); 
+    } catch {} 
+  }, [members, workingStart, workingEnd]);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (!hash) return;
-    try { const s = JSON.parse(atob(hash)); if (s.members) setMembers(s.members); if (s.date) setDate(s.date); if (s.hour !== undefined) setHour(s.hour); } catch {}
+    try { 
+      const parsed = JSON.parse(atob(hash)); 
+      const s = validateHashData(parsed);
+      if (!s) return;
+      if (s.members) setMembers(s.members); 
+      if (s.date) setDate(s.date); 
+      if (s.hour !== undefined) setHour(s.hour); 
+      if (s.workingStart !== undefined) setWorkingStart(s.workingStart);
+      if (s.workingEnd !== undefined) setWorkingEnd(s.workingEnd);
+    } catch {}
   }, []);
 
   const dateObj = useMemo(() => new Date(`${date}T${String(hour).padStart(2, "0")}:00:00`), [date, hour]);
@@ -104,10 +148,10 @@ export default function App() {
   const grid = useMemo(() => Array.from({ length: 24 }, (_, h) => {
     const d = new Date(`${date}T${String(h).padStart(2, "0")}:00:00`);
     const times = members.map((m) => ({ ...m, time: localTimeAt(d, m.timezone) }));
-    const good = times.filter((m) => hourStatus(m.time.hour) === "good").length;
-    const okay = times.filter((m) => hourStatus(m.time.hour) === "okay").length;
+    const good = times.filter((m) => hourStatus(m.time.hour, workingStart, workingEnd) === "good").length;
+    const okay = times.filter((m) => hourStatus(m.time.hour, workingStart, workingEnd) === "okay").length;
     return { h, times, good, okay };
-  }), [members, date]);
+  }), [members, date, workingStart, workingEnd]);
 
   const filteredTzs = useMemo(() => {
     const q = tzSearch.toLowerCase();
@@ -115,13 +159,14 @@ export default function App() {
   }, [tzSearch]);
 
   const addMember = () => {
-    if (!addName.trim()) return;
-    setMembers((p) => [...p, { id: uid(), name: addName.trim(), timezone: addTz }]);
+    const cleanName = sanitizeName(addName.trim());
+    if (!cleanName) return;
+    setMembers((p) => [...p, { id: uid(), name: cleanName, timezone: addTz }]);
     setAddName(""); setAddTz(BROWSER_TZ); setTzSearch(""); setShowAdd(false); setShowDrop(false);
   };
 
   const share = () => {
-    const enc = btoa(JSON.stringify({ members, date, hour }));
+    const enc = btoa(JSON.stringify({ members, date, hour, workingStart, workingEnd }));
     navigator.clipboard.writeText(`${window.location.href.split("#")[0]}#${enc}`).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
@@ -234,6 +279,25 @@ export default function App() {
               </div>
             ))}
 
+            {/* Working Hours Settings */}
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #e5e7eb" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 12 }}>Working Hours</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, color: "#9ca3af", marginBottom: 4 }}>START</div>
+                  <select value={workingStart} onChange={(e) => setWorkingStart(parseInt(e.target.value))} style={{ width: "100%", padding: "4px 8px", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#ffffff" }}>
+                    {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{fmt12(i)}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 9, color: "#9ca3af", marginBottom: 4 }}>END</div>
+                  <select value={workingEnd} onChange={(e) => setWorkingEnd(parseInt(e.target.value))} style={{ width: "100%", padding: "4px 8px", fontSize: 12, borderRadius: 6, border: "1px solid #e5e7eb", background: "#ffffff" }}>
+                    {Array.from({ length: 24 }, (_, i) => <option key={i} value={i}>{fmt12(i)}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
             {/* Legend */}
             <div style={{ marginTop: "auto", paddingTop: 16, borderTop: "1px solid #e5e7eb" }}>
               {Object.values(S).map((s) => (
@@ -297,7 +361,7 @@ export default function App() {
                     {date} · {fmt12(hour)} your time ({BROWSER_TZ})
                   </div>
                   {memberTimes.map((m) => {
-                    const st = hourStatus(m.time.hour);
+                    const st = hourStatus(m.time.hour, workingStart, workingEnd);
                     const s = S[st];
                     return (
                       <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", background: "#ffffff", border: `1px solid #e5e7eb`, borderRadius: 12, transition: "border-color 0.15s" }}>
@@ -307,7 +371,6 @@ export default function App() {
                         </div>
                         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
                           <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 500, color: s.text, letterSpacing: "-0.5px" }}>{m.time.display}</span>
-                          <span style={{ fontSize: 11, color: "#6b7280" }}>{m.time.weekday}</span>
                         </div>
                         <div style={{ background: s.pill, color: s.text, border: `1px solid ${s.border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap" }}>
                           {s.label}
@@ -383,7 +446,7 @@ export default function App() {
                           </div>
                           {grid.map(({ h, times }) => {
                             const mt = times.find((t) => t.id === m.id);
-                            const st = mt ? hourStatus(mt.time.hour) : "bad";
+                            const st = mt ? hourStatus(mt.time.hour, workingStart, workingEnd) : "bad";
                             const s = S[st];
                             const isSelected = h === hour;
                             return (
