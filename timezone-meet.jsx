@@ -207,7 +207,7 @@ export default function App() {
         .hov:hover { background: #f9fafb !important; }
         input[type=text], input[type=date] { background: #ffffff; border: 1px solid #d1d5db; color: #111827; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; width: 100%; }
         input[type=text]:focus, input[type=date]:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px #7c3aed22; }
-        input[type=range] { accent-color: #7c3aed; width: 100%; cursor: pointer; margin: 0; }
+        input[type=range] { accent-color: #7c3aed; width: 220px; cursor: pointer; margin: 0; }
         .cell { height: 34px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'DM Mono', monospace; font-size: 10px; cursor: pointer; transition: filter 0.1s, transform 0.1s; }
         .cell:hover { filter: brightness(0.95); transform: scaleY(1.06); z-index: 2; position: relative; }
         .pill-btn { border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; font-family: 'DM Mono', monospace; cursor: pointer; transition: filter 0.15s; }
@@ -226,26 +226,56 @@ export default function App() {
         .tz-item.sel { color: #7c3aed; font-weight: 500; }
         .score-row > div { cursor: pointer; }
         .score-row > div:hover { filter: brightness(0.95); }
+
+        /* Layout Containers */
+        .layout-root { font-family: 'DM Sans', sans-serif; background: #ffffff; min-height: 100vh; color: #111827; }
+        .header-container { border-bottom: 1px solid #f3f4f6; padding: 0 24px; height: 56px; display: flex; align-items: center; justifyContent: space-between; }
+        .main-layout-container { display: grid; grid-template-columns: 264px 1fr; min-height: calc(100vh - 56px); height: calc(100vh - 56px); overflow: hidden; }
+        .sidebar-container { border-right: 1px solid #f3f4f6; background: #f9fafb; padding: 20px 16px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; height: 100%; position: relative; }
+        .main-overflow-container { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
+        .controls-bar { border-bottom: 1px solid #f3f4f6; padding: 10px 24px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .content-area { flex: 1; overflow-y: auto; padding: 24px; }
+
+        @media (max-width: 768px) {
+          .main-layout-container { grid-template-columns: 1fr; height: auto; min-height: auto; overflow: visible; }
+          .sidebar-container { height: auto; max-height: 420px; border-right: none; border-bottom: 1px solid #f3f4f6; padding: 16px; box-shadow: inset 0 -2px 4px rgba(0,0,0,0.02); }
+          .main-overflow-container { height: auto; overflow: visible; }
+          .header-container { padding: 0 16px; }
+          .controls-bar { padding: 16px; gap: 12px; }
+          .content-area { padding: 16px; }
+          .score-row > div:first-of-type, .member-row-label { width: 100px !important; }
+          .member-time-row { grid-template-columns: 100px repeat(24, 1fr) !important; }
+          input[type=range] { width: 100%; flex: 1; }
+        }
+        
+        @media (max-width: 480px) {
+          .controls-bar > div { width: 100%; }
+          .tab { flex: 1; text-align: center; }
+          .primary-btn { width: 100%; }
+          .ghost-btn { padding: 6px 10px; }
+        }
       `}</style>
 
-      <div style={{ fontFamily: "'DM Sans', sans-serif", background: "#ffffff", minHeight: "100vh", color: "#111827" }}>
+      <div className="layout-root">
 
         {/* ── Header ── */}
-        <div style={{ borderBottom: "1px solid #f3f4f6", padding: "0 24px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="header-container" style={{ justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 1 }}>
             <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 20, color: "#111827", letterSpacing: "-0.5px" }}>tz</span>
             <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 20, color: "#7c3aed" }}>meet</span>
           </div>
           <button className="ghost-btn" onClick={share} style={{ fontSize: 12 }}>
             <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
-            {copied ? "Copied!" : "Share link"}
+            <span style={{ display: copied ? "inline" : "inline", visibility: copied ? "visible" : "visible" }}>
+              {copied ? "Copied!" : "Share link"}
+            </span>
           </button>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "264px 1fr", minHeight: "calc(100vh - 56px)" }}>
+        <div className="main-layout-container">
 
           {/* ── Sidebar ── */}
-          <div style={{ borderRight: "1px solid #f3f4f6", background: "#f9fafb", padding: "20px 16px", display: "flex", flexDirection: "column", gap: 10, overflowY: "auto" }}>
+          <div className="sidebar-container">
 
             {/* Sidebar header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
@@ -319,24 +349,13 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            {/* Legend */}
-            <div style={{ marginTop: "auto", paddingTop: 16, borderTop: "1px solid #e5e7eb" }}>
-              {Object.values(S).map((s) => (
-                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: s.bg, border: `1px solid ${s.border}` }}/>
-                  <span style={{ fontSize: 11, color: "#6b7280" }}>{s.label}</span>
-                  <div style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: s.text, opacity: 0.6 }}/>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* ── Main ── */}
-          <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div className="main-overflow-container">
 
             {/* Controls bar */}
-            <div style={{ borderBottom: "1px solid #f3f4f6", padding: "10px 24px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <div className="controls-bar">
               <div style={{ display: "flex", gap: 3 }}>
                 <button className={`tab${tab === "check" ? " on" : ""}`} onClick={() => setTab("check")}>Time check</button>
                 <button className={`tab${tab === "overlap" ? " on" : ""}`} onClick={() => setTab("overlap")}>Find overlap</button>
@@ -373,7 +392,7 @@ export default function App() {
             </div>
 
             {/* Content */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
+            <div className="content-area">
 
               {members.length === 0 && (
                 <div style={{ color: "#9ca3af", fontSize: 13, textAlign: "center", paddingTop: 80 }}>
@@ -457,7 +476,7 @@ export default function App() {
                   <div style={{ overflowX: "auto" }}>
                     <div style={{ minWidth: 760 }}>
                       {/* Hour labels */}
-                      <div style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 6 }}>
+                      <div className="member-time-row" style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 6 }}>
                         <div/>
                         {Array.from({ length: 24 }, (_, h) => (
                           <div key={h} style={{ textAlign: "center", fontSize: 9, color: h === Math.floor(hour) ? "#7c3aed" : "#9ca3af", fontFamily: "'DM Mono', monospace", fontWeight: h === Math.floor(hour) ? 600 : 400 }}>
@@ -467,8 +486,8 @@ export default function App() {
                       </div>
 
                       {/* GMT Row */}
-                      <div style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 12, borderBottom: "1px dashed #e5e7eb", paddingBottom: 10 }}>
-                        <div style={{ display: "flex", alignItems: "center", paddingRight: 10 }}>
+                      <div className="member-time-row" style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 12, borderBottom: "1px dashed #e5e7eb", paddingBottom: 10 }}>
+                        <div className="member-row-label" style={{ display: "flex", alignItems: "center", paddingRight: 10 }}>
                           <span style={{ fontSize: 11, color: "#7c3aed", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>GMT 0</span>
                         </div>
                         {grid.map(({ h }) => {
@@ -487,8 +506,8 @@ export default function App() {
 
                       {/* Member rows */}
                       {members.map((m) => (
-                        <div key={m.id} style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 2 }}>
-                          <div style={{ display: "flex", alignItems: "center", paddingRight: 10 }}>
+                        <div key={m.id} className="member-time-row" style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 2 }}>
+                          <div className="member-row-label" style={{ display: "flex", alignItems: "center", paddingRight: 10 }}>
                             <span style={{ fontSize: 12, color: "#4b5563", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 500 }}>{m.name}</span>
                           </div>
                           {grid.map(({ h, times }) => {
@@ -508,8 +527,8 @@ export default function App() {
                       ))}
 
                       {/* Score row */}
-                      <div className="score-row" style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginTop: 8 }}>
-                        <div style={{ display: "flex", alignItems: "center" }}>
+                      <div className="score-row member-time-row" style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginTop: 8 }}>
+                        <div className="member-row-label" style={{ display: "flex", alignItems: "center" }}>
                           <span style={{ fontSize: 10, color: "#6b7280" }}>score</span>
                         </div>
                         {grid.map(({ h, good, okay }) => {
