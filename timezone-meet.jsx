@@ -57,15 +57,31 @@ function uid() { return Math.random().toString(36).slice(2, 8); }
 
 function localTimeAt(dateObj, tz) {
   try {
-    const fmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: false, weekday: "short" });
+    const fmt = new Intl.DateTimeFormat("en-US", { 
+      timeZone: tz, 
+      hour: "numeric", 
+      minute: "2-digit", 
+      hour12: false, 
+      weekday: "short",
+      month: "short",
+      day: "numeric"
+    });
     const parts = fmt.formatToParts(dateObj);
     const get = (t) => parts.find((p) => p.type === t)?.value ?? "";
     let h = parseInt(get("hour")) || 0;
     if (h === 24) h = 0;
     const min = get("minute") || "00";
     const wd = get("weekday") || "";
-    return { hour: h, min, weekday: wd, display: `${String(h).padStart(2, "0")}:${min}` };
-  } catch { return { hour: 0, min: "00", weekday: "", display: "00:00" }; }
+    const month = get("month") || "";
+    const day = get("day") || "";
+    return { 
+      hour: h, 
+      min, 
+      weekday: wd, 
+      date: `${month} ${day}`,
+      display: `${String(h).padStart(2, "0")}:${min}` 
+    };
+  } catch { return { hour: 0, min: "00", weekday: "", date: "", display: "00:00" }; }
 }
 
 function hourStatus(h, start, end) {
@@ -84,10 +100,12 @@ function hourStatus(h, start, end) {
 }
 
 function fmt12(h) {
-  if (h === 0) return "12 am";
-  if (h < 12) return `${h} am`;
-  if (h === 12) return "12 pm";
-  return `${h - 12} pm`;
+  const hh = Math.floor(h);
+  const mm = h % 1 === 0 ? ":00" : ":30";
+  if (hh === 0) return `12${mm} am`;
+  if (hh < 12) return `${hh}${mm} am`;
+  if (hh === 12) return `12${mm} pm`;
+  return `${hh - 12}${mm} pm`;
 }
 
 const S = {
@@ -141,7 +159,11 @@ export default function App() {
     } catch {}
   }, []);
 
-  const dateObj = useMemo(() => new Date(`${date}T${String(hour).padStart(2, "0")}:00:00`), [date, hour]);
+  const dateObj = useMemo(() => {
+    const d = new Date(`${date}T00:00:00`);
+    d.setHours(Math.floor(hour), (hour % 1) * 60);
+    return d;
+  }, [date, hour]);
 
   const memberTimes = useMemo(() => members.map((m) => ({ ...m, time: localTimeAt(dateObj, m.timezone) })), [members, dateObj]);
 
@@ -324,13 +346,18 @@ export default function App() {
                   <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ width: "auto" }} />
                   <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", background: "#f3f4f6", borderRadius: 6, border: "1px solid #e5e7eb" }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px" }}>GMT 0</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#111827", fontFamily: "'DM Mono', monospace" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#111827", fontFamily: "'DM Mono', monospace", display: "flex", alignItems: "baseline", gap: 6 }}>
                       {(() => {
                         const base = new Date(date + "T00:00:00");
                         const d = new Date(base.getTime());
-                        d.setHours(hour);
+                        d.setHours(Math.floor(hour), (hour % 1) * 60);
                         const utc = localTimeAt(d, "UTC");
-                        return utc.display;
+                        return (
+                          <>
+                            {utc.display}
+                            <span style={{ fontSize: 10, fontWeight: 500, color: "#6b7280", opacity: 0.8 }}>{utc.date}</span>
+                          </>
+                        );
                       })()}
                     </span>
                   </div>
@@ -338,8 +365,8 @@ export default function App() {
                 {tab === "check" && (
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, maxWidth: 320 }}>
                     <span style={{ fontSize: 12, color: "#6b7280", whiteSpace: "nowrap" }}>Your time:</span>
-                    <input type="range" min={0} max={23} value={hour} onChange={(e) => setHour(Number(e.target.value))} />
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: "#7c3aed", minWidth: 44, textAlign: "right" }}>{fmt12(hour)}</span>
+                    <input type="range" min={0} max={23.5} step={0.5} value={hour} onChange={(e) => setHour(Number(e.target.value))} />
+                    <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 13, color: "#7c3aed", minWidth: 64, textAlign: "right" }}>{fmt12(hour)}</span>
                   </div>
                 )}
               </div>
@@ -369,8 +396,9 @@ export default function App() {
                           <div style={{ fontSize: 14, fontWeight: 600, color: "#111827", marginBottom: 3 }}>{m.name}</div>
                           <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "'DM Mono', monospace" }}>{fmtOffset(m.timezone)} {m.timezone.replace(/_/g, " ")}</div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 500, color: s.text, letterSpacing: "-0.5px" }}>{m.time.display}</span>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 500, color: s.text, letterSpacing: "-0.5px", lineHeight: 1 }}>{m.time.display}</span>
+                          <span style={{ fontSize: 10, color: s.text, opacity: 0.7, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.2px" }}>{m.time.weekday}, {m.time.date}</span>
                         </div>
                         <div style={{ background: s.pill, color: s.text, border: `1px solid ${s.border}`, borderRadius: 6, padding: "5px 12px", fontSize: 11, fontWeight: 500, whiteSpace: "nowrap" }}>
                           {s.label}
@@ -432,10 +460,29 @@ export default function App() {
                       <div style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 6 }}>
                         <div/>
                         {Array.from({ length: 24 }, (_, h) => (
-                          <div key={h} style={{ textAlign: "center", fontSize: 9, color: h === hour ? "#7c3aed" : "#9ca3af", fontFamily: "'DM Mono', monospace", fontWeight: h === hour ? 600 : 400 }}>
+                          <div key={h} style={{ textAlign: "center", fontSize: 9, color: h === Math.floor(hour) ? "#7c3aed" : "#9ca3af", fontFamily: "'DM Mono', monospace", fontWeight: h === Math.floor(hour) ? 600 : 400 }}>
                             {h % 2 === 0 ? fmt12(h).replace(" ", "") : "·"}
                           </div>
                         ))}
+                      </div>
+
+                      {/* GMT Row */}
+                      <div style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 12, borderBottom: "1px dashed #e5e7eb", paddingBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "center", paddingRight: 10 }}>
+                          <span style={{ fontSize: 11, color: "#7c3aed", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>GMT 0</span>
+                        </div>
+                        {grid.map(({ h }) => {
+                          const d = new Date(`${date}T${String(h).padStart(2, "0")}:00:00`);
+                          const utc = localTimeAt(d, "UTC");
+                          const isSelected = h === Math.floor(hour);
+                          return (
+                            <div key={h} className="cell" title={`${utc.display} (GMT 0)`}
+                              onClick={() => { setHour(h); setTab("check"); }}
+                              style={{ background: "#f5f3ff", color: "#7c3aed", border: `1px solid ${isSelected ? "#7c3aed" : "#ddd6fe"}`, fontWeight: 700 }}>
+                              {utc.display.slice(0, 2)}
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {/* Member rows */}
@@ -448,7 +495,7 @@ export default function App() {
                             const mt = times.find((t) => t.id === m.id);
                             const st = mt ? hourStatus(mt.time.hour, workingStart, workingEnd) : "bad";
                             const s = S[st];
-                            const isSelected = h === hour;
+                            const isSelected = h === Math.floor(hour);
                             return (
                               <div key={h} className="cell" title={`${mt?.time.display} (${m.name})`}
                                 onClick={() => { setHour(h); setTab("check"); }}
@@ -469,7 +516,7 @@ export default function App() {
                           const total = members.length;
                           const st = good === total ? "good" : good + okay === total ? "okay" : "bad";
                           const s = S[st];
-                          const isSelected = h === hour;
+                          const isSelected = h === Math.floor(hour);
                           return (
                             <div key={h} className="cell" title={`${good} ideal, ${okay} acceptable`}
                               onClick={() => { setHour(h); setTab("check"); }}
