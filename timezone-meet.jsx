@@ -46,22 +46,34 @@ try {
   ALL_TZS = raw.map(tz => ({ name: tz, offset: getOffsetMinutes(tz), label: `${fmtOffset(tz)} ${tz.replace(/_/g, " ")}` }))
     .sort((a, b) => a.offset - b.offset || a.name.localeCompare(b.name));
 } catch {
-  const fallback = ["UTC","America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Asia/Dubai","Asia/Kolkata","Asia/Singapore","Asia/Tokyo","Australia/Sydney"];
+  const fallback = ["UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Asia/Dubai", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney"];
   ALL_TZS = fallback.map(tz => ({ name: tz, offset: getOffsetMinutes(tz), label: `${fmtOffset(tz)} ${tz}` }))
     .sort((a, b) => a.offset - b.offset || a.name.localeCompare(b.name));
 }
 
 const BROWSER_TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return "UTC"; } })();
 
+function currentLocalDateISO() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function nearestHalfHourSlot(dateObj = new Date()) {
+  const totalMinutes = dateObj.getHours() * 60 + dateObj.getMinutes();
+  const rounded = Math.round(totalMinutes / 30) * 30;
+  return ((rounded % (24 * 60)) + (24 * 60)) % (24 * 60) / 60;
+}
+
 function uid() { return Math.random().toString(36).slice(2, 8); }
 
 function localTimeAt(dateObj, tz) {
   try {
-    const fmt = new Intl.DateTimeFormat("en-US", { 
-      timeZone: tz, 
-      hour: "numeric", 
-      minute: "2-digit", 
-      hour12: false, 
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: false,
       weekday: "short",
       month: "short",
       day: "numeric"
@@ -74,12 +86,12 @@ function localTimeAt(dateObj, tz) {
     const wd = get("weekday") || "";
     const month = get("month") || "";
     const day = get("day") || "";
-    return { 
-      hour: h, 
-      min, 
-      weekday: wd, 
+    return {
+      hour: h,
+      min,
+      weekday: wd,
       date: `${month} ${day}`,
-      display: `${String(h).padStart(2, "0")}:${min}` 
+      display: `${String(h).padStart(2, "0")}:${min}`
     };
   } catch { return { hour: 0, min: "00", weekday: "", date: "", display: "00:00" }; }
 }
@@ -89,13 +101,13 @@ function hourStatus(h, start, end) {
   // Example: 17 to 1 (5pm to 1am)
   const isGood = end > start ? (h >= start && h < end) : (h >= start || h < end);
   if (isGood) return "good";
-  
+
   // Okay: 2 hours before/after good
   const sOkay = (start - 2 + 24) % 24;
   const eOkay = (end + 2) % 24;
   const isOkay = eOkay > sOkay ? (h >= sOkay && h < eOkay) : (h >= sOkay || h < eOkay);
   if (isOkay) return "okay";
-  
+
   return "bad";
 }
 
@@ -111,7 +123,7 @@ function fmt12(h) {
 const S = {
   good: { bg: "#f0fdf4", pill: "#dcfce7", text: "#15803d", border: "#bbf7d0", label: "Working hours" },
   okay: { bg: "#fffbeb", pill: "#fef3c7", text: "#a16207", border: "#fde68a", label: "Early / Late" },
-  bad:  { bg: "#f9fafb", pill: "#f3f4f6", text: "#6b7280", border: "#e5e7eb", label: "Night / Off"  },
+  bad: { bg: "#f9fafb", pill: "#f3f4f6", text: "#6b7280", border: "#e5e7eb", label: "Night / Off" },
 };
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -125,38 +137,38 @@ export default function App() {
   });
 
   const [members, setMembers] = useState(() => storage?.members || [{ id: uid(), name: "You", timezone: BROWSER_TZ }]);
-  const [tab, setTab]               = useState("check");
-  const [date, setDate]             = useState(() => new Date().toISOString().slice(0, 10));
-  const [hour, setHour]             = useState(14);
+  const [tab, setTab] = useState("check");
+  const [date, setDate] = useState(() => currentLocalDateISO());
+  const [hour, setHour] = useState(() => nearestHalfHourSlot());
   const [workingStart, setWorkingStart] = useState(() => storage?.workingStart ?? 17);
-  const [workingEnd, setWorkingEnd]     = useState(() => storage?.workingEnd ?? 1);
+  const [workingEnd, setWorkingEnd] = useState(() => storage?.workingEnd ?? 1);
 
-  const [showAdd,  setShowAdd]      = useState(false);
-  const [addName,  setAddName]      = useState("");
-  const [addTz,    setAddTz]        = useState(BROWSER_TZ);
-  const [tzSearch, setTzSearch]     = useState("");
-  const [showDrop, setShowDrop]     = useState(false);
-  const [copied,   setCopied]       = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addName, setAddName] = useState("");
+  const [addTz, setAddTz] = useState(BROWSER_TZ);
+  const [tzSearch, setTzSearch] = useState("");
+  const [showDrop, setShowDrop] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => { 
-    try { 
-      localStorage.setItem("tz-team-v2", JSON.stringify({ members, workingStart, workingEnd })); 
-    } catch {} 
+  useEffect(() => {
+    try {
+      localStorage.setItem("tz-team-v2", JSON.stringify({ members, workingStart, workingEnd }));
+    } catch { }
   }, [members, workingStart, workingEnd]);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (!hash) return;
-    try { 
-      const parsed = JSON.parse(atob(hash)); 
+    try {
+      const parsed = JSON.parse(atob(hash));
       const s = validateHashData(parsed);
       if (!s) return;
-      if (s.members) setMembers(s.members); 
-      if (s.date) setDate(s.date); 
-      if (s.hour !== undefined) setHour(s.hour); 
+      if (s.members) setMembers(s.members);
+      if (s.date) setDate(s.date);
+      if (s.hour !== undefined) setHour(s.hour);
       if (s.workingStart !== undefined) setWorkingStart(s.workingStart);
       if (s.workingEnd !== undefined) setWorkingEnd(s.workingEnd);
-    } catch {}
+    } catch { }
   }, []);
 
   const dateObj = useMemo(() => {
@@ -265,7 +277,7 @@ export default function App() {
             <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 20, color: "#7c3aed" }}>meet</span>
           </div>
           <button className="ghost-btn" onClick={share} style={{ fontSize: 12 }}>
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" /></svg>
             <span style={{ display: copied ? "inline" : "inline", visibility: copied ? "visible" : "visible" }}>
               {copied ? "Copied!" : "Share link"}
             </span>
@@ -326,7 +338,7 @@ export default function App() {
                   <div style={{ fontSize: 11, color: "#6b7280", fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fmtOffset(m.timezone)} {m.timezone.replace(/_/g, " ")}</div>
                 </div>
                 <button className="del-btn" title="Remove" onClick={() => setMembers((p) => p.filter((x) => x.id !== m.id))}>
-                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
             ))}
@@ -436,7 +448,7 @@ export default function App() {
                     {bestGood.length > 0 && (
                       <div style={{ background: S.good.pill, border: `1px solid ${S.good.border}`, borderRadius: 10, padding: "14px 18px" }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: S.good.text, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+                          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
                           Ideal — everyone in core working hours
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -452,7 +464,7 @@ export default function App() {
                     {bestOkay.length > 0 && (
                       <div style={{ background: S.okay.pill, border: `1px solid ${S.okay.border}`, borderRadius: 10, padding: "14px 18px" }}>
                         <div style={{ fontSize: 11, fontWeight: 600, color: S.okay.text, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
                           Acceptable — within reasonable hours for all
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -477,7 +489,7 @@ export default function App() {
                     <div style={{ minWidth: 760 }}>
                       {/* Hour labels */}
                       <div className="member-time-row" style={{ display: "grid", gridTemplateColumns: "130px repeat(24, 1fr)", gap: 2, marginBottom: 6 }}>
-                        <div/>
+                        <div />
                         {Array.from({ length: 24 }, (_, h) => (
                           <div key={h} style={{ textAlign: "center", fontSize: 9, color: h === Math.floor(hour) ? "#7c3aed" : "#9ca3af", fontFamily: "'DM Mono', monospace", fontWeight: h === Math.floor(hour) ? 600 : 400 }}>
                             {h % 2 === 0 ? fmt12(h).replace(" ", "") : "·"}
